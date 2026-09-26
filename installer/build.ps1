@@ -6,10 +6,10 @@ app code, and a small launcher with the app icon. The optional NVIDIA speech lib
 bundled: Setup downloads the pinned wheels, checks their SHA-256, and installs them only if the user wants them.
 
 Needs Inno Setup 6.5+ (winget install JRSoftware.InnoSetup) and internet access. Run from anywhere:
-    .\installer\build.ps1 [-Version 1.0.0] [-Clean]
+    .\installer\build.ps1 [-Version 1.0.1] [-Clean]
 #>
 param(
-    [string]$Version = '1.0.0',
+    [string]$Version = '1.0.1',
     [switch]$Clean
 )
 $ErrorActionPreference = 'Stop'
