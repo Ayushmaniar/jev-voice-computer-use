@@ -749,6 +749,7 @@ class ActivityPanel:
               "so Right Ctrl shortcuts keep working.")
 
     def __init__(self, root: tk.Tk, theme: Theme, *, auto_var: tk.BooleanVar, goal_var: tk.BooleanVar, hide_var: tk.BooleanVar,
+                 logs_var: tk.BooleanVar,
                  on_command: Callable[[str], None], on_open_logs: Callable[[], None], on_api_key: Callable[[], None],
                  on_quit: Callable[[], None], on_close: Callable[[], None], logo: Any = None):
         self.t = theme
@@ -793,11 +794,13 @@ class ActivityPanel:
 
         tiles = tk.Frame(outer, bg=C["bg"])
         tiles.pack(fill="x")
-        tile_w = (self.inner_w - 2 * px(8)) // 3
+        tile_w = (self.inner_w - 3 * px(8)) // 4
         for i, (var, glyph, text, tip) in enumerate((
                 (auto_var, "bolt", "Auto-run", "Run actions right away. When off, Jev shows the action and waits for Run."),
                 (goal_var, "target", "Multi-step", "Let Jev take several steps to reach a goal, like “unmute the video”."),
-                (hide_var, "hide", "Hide pill", "Hide the pill at the bottom of the screen while nothing is happening."))):
+                (hide_var, "hide", "Hide pill", "Hide the pill at the bottom of the screen while nothing is happening."),
+                (logs_var, "clock", "Keep logs", "Save each command's audio, the on-screen text Jev saw and its requests to the logs "
+                                                  "folder, for replaying and debugging. Off by default."))):
             tile = Tile(tiles, theme, var, glyph, text, tile_w)
             tile.pack(side="left", padx=(0 if i == 0 else px(8), 0))
             self.tip.bind([tile], tip)

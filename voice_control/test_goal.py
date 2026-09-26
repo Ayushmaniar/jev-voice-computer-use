@@ -109,6 +109,30 @@ class GoalLoopTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[2]["controls"], initial_controls)
         self.assertEqual(run.call_args.args[5]["controls"], current_controls)
 
+    def test_nothing_is_logged_unless_keep_logs_is_on(self):
+        state, controls, apps = screen("New Tab")
+        scene = Future()
+        scene.set_result({"state": state, "controls": controls, "apps": apps, "hotwords": "",
+                          "capture_ms": 1, "app_catalog_refreshed": False})
+        for keep in (False, True):
+            voice = app.VoiceApp.__new__(app.VoiceApp)
+            voice.settler = Mock()
+            voice.events = queue.Queue()
+            voice.model_device = "cpu"
+            voice.model_name = "base.en"
+            voice.keep_logs = keep
+            with (patch.object(voice, "_transcribe", return_value="open Gmail"),
+                  patch.object(voice, "_run_goal"),
+                  patch.object(app, "save_clip", return_value="clip.wav") as clip,
+                  patch.object(app, "append_log") as log,
+                  patch.object(app, "read_key", return_value="key")):
+                voice._plan_audio(np.ones(5000, dtype=np.float32), (10, scene), None, "uid", True, True)
+                voice._log({"utterance_id": "uid", "outcome": "discarded"})
+            self.assertEqual(clip.called, keep)
+            self.assertEqual(log.called, keep)
+        with patch.object(app, "SETTINGS", Path(tempfile.gettempdir()) / "jev-missing-settings.json"):
+            self.assertFalse(app.load_settings()["keep_logs"])
+
     def test_stop_after_review_approval_prevents_execution(self):
         stopped = False
         acted = []

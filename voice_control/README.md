@@ -254,7 +254,9 @@ Windows UI Automation cannot follow fall back to the fixed window-level settle.
 
 ## Logs, timing, and privacy
 
-Each utterance produces a plan/error record and, if executed or discarded, a final record
+Logs are **off by default**. Turn on **Keep logs** (a tile in the activity panel, or the tray menu) to
+write them; while it is off, the app writes nothing described in this section to disk. With it on,
+each utterance produces a plan/error record and, if executed or discarded, a final record
 with the same `utterance_id` in `logs/voice-actions.jsonl`. The plan/error
 record includes recognized words, chosen target, Jev choices/probabilities,
 per-stage milliseconds, outcome, and errors, plus everything needed to replay

@@ -92,7 +92,7 @@ def cuda_usable() -> bool:
 
 
 def load_settings() -> dict:
-    settings = {"auto_run": True, "goal_mode": True, "hide_when_idle": False, "pill_anchor": None}
+    settings = {"auto_run": True, "goal_mode": True, "hide_when_idle": False, "keep_logs": False, "pill_anchor": None}
     try:
         settings.update(json.loads(SETTINGS.read_text(encoding="utf-8")))
     except (OSError, ValueError):
@@ -132,6 +132,8 @@ def _logo():
 
 
 class VoiceApp:
+    keep_logs = False  # nothing is written to logs/ unless the user turns on Keep logs
+
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("Jev Voice Control")
@@ -139,6 +141,7 @@ class VoiceApp:
             self.root.iconphoto(True, tk.PhotoImage(file=str(ICON)))
         LOG.parent.mkdir(parents=True, exist_ok=True)
         self.settings = load_settings()
+        self.keep_logs = bool(self.settings["keep_logs"])
         self.last_external_hwnd: int | None = None
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jev-voice", initializer=pythoncom.CoInitialize)
@@ -179,16 +182,18 @@ class VoiceApp:
         self.auto = tk.BooleanVar(value=bool(self.settings["auto_run"]))
         self.goal_mode = tk.BooleanVar(value=bool(self.settings["goal_mode"]))
         self.hide_idle = tk.BooleanVar(value=bool(self.settings["hide_when_idle"]))
+        self.logs_var = tk.BooleanVar(value=self.keep_logs)
         anchor = self.settings.get("pill_anchor")
         self.pill = Pill(self.root, self.theme, on_panel=self.toggle_panel, on_menu=self._show_menu,
                          on_run=self.execute_pending, on_cancel=self.cancel_pending, on_moved=self._pill_moved,
                          get_level=self._level, anchor=tuple(anchor) if anchor else None)
-        self.panel = ActivityPanel(self.root, self.theme, auto_var=self.auto, goal_var=self.goal_mode, hide_var=self.hide_idle,
+        self.panel = ActivityPanel(self.root, self.theme, auto_var=self.auto, goal_var=self.goal_mode, hide_var=self.hide_idle, logs_var=self.logs_var,
                                    on_command=self.plan_typed_command, on_open_logs=self.open_logs,
                                    on_api_key=self.open_key_dialog, on_quit=self._close, on_close=self.toggle_panel,
                                    logo=_logo())
         self.auto.trace_add("write", lambda *_: self._save_settings())
         self.goal_mode.trace_add("write", lambda *_: self._save_settings())
+        self.logs_var.trace_add("write", lambda *_: self._save_settings())
         self.hide_idle.trace_add("write", lambda *_: (self.pill.set_hide_when_idle(self.hide_idle.get()), self._save_settings()))
         self.root.update_idletasks()
         self.root.update()
@@ -208,7 +213,9 @@ class VoiceApp:
 
     # ------------------------------------------------------------ settings and chrome
     def _save_settings(self) -> None:
-        self.settings.update(auto_run=self.auto.get(), goal_mode=self.goal_mode.get(), hide_when_idle=self.hide_idle.get())
+        self.settings.update(auto_run=self.auto.get(), goal_mode=self.goal_mode.get(), hide_when_idle=self.hide_idle.get(),
+                             keep_logs=self.logs_var.get())
+        self.keep_logs = self.settings["keep_logs"]
         try:
             saved = {k: v for k, v in self.settings.items() if k != "auto_run"}
             SETTINGS.write_text(json.dumps(saved, indent=2), encoding="utf-8")
@@ -240,6 +247,10 @@ class VoiceApp:
 
     def open_logs(self) -> None:
         os.startfile(LOG.parent)
+
+    def _log(self, record: dict) -> None:
+        if self.keep_logs:
+            append_log(LOG, record)
 
     def _ask_for_key_if_missing(self) -> None:
         try:
@@ -302,6 +313,7 @@ class VoiceApp:
             pystray.MenuItem("Multi-step goal mode", post("goal_mode"), checked=lambda _: bool(self.settings["goal_mode"])),
             pystray.MenuItem("Stop current goal", post("stop_goal")),
             pystray.MenuItem("Hide pill when idle", post("hide_idle"), checked=lambda _: bool(self.settings["hide_when_idle"])),
+            pystray.MenuItem("Keep logs", post("keep_logs"), checked=lambda _: bool(self.settings["keep_logs"])),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("API key…", post("api_key")),
             pystray.MenuItem("Open logs folder", post("logs")),
@@ -446,7 +458,7 @@ class VoiceApp:
         self.audio_blocks = []
         if len(audio) < 4000:
             reason = "no_audio" if not len(audio) else "too_short"
-            append_log(LOG, {"utterance_id": uuid.uuid4().hex, "event": "capture_failed", "transcript": "",
+            self._log({"utterance_id": uuid.uuid4().hex, "event": "capture_failed", "transcript": "",
                              "audio_duration_s": round(len(audio) / SAMPLE_RATE, 2), "outcome": reason})
             self.pill.show("hint", title="No audio from the microphone" if reason == "no_audio" else "Hold Right Ctrl while you speak")
             return
@@ -466,7 +478,7 @@ class VoiceApp:
         if self.recording:
             self._stop_stream()
             self.audio_blocks = []
-            append_log(LOG, {"utterance_id": uuid.uuid4().hex, "event": "capture_discarded", "transcript": "", "outcome": "right_ctrl_used_as_shortcut"})
+            self._log({"utterance_id": uuid.uuid4().hex, "event": "capture_discarded", "transcript": "", "outcome": "right_ctrl_used_as_shortcut"})
             if self.pill.state == "listening":
                 self.pill.show("idle")
 
@@ -529,7 +541,7 @@ class VoiceApp:
                     goal_mode: bool = False, auto_run: bool = True, release_scene: Future | None = None) -> None:
         record: dict = {"utterance_id": uid or uuid.uuid4().hex, "source": "typed_test" if typed is not None else "microphone", "audio_duration_s": round(len(audio) / SAMPLE_RATE, 2) if audio is not None else None, "asr_device": self.model_device if audio is not None else None, "timings_ms": {}, "outcome": "planning"}
         uid = record["utterance_id"]
-        if audio is not None:
+        if audio is not None and self.keep_logs:
             try:
                 record["audio_path"] = save_clip(audio, uid)
             except OSError as error:
@@ -586,13 +598,13 @@ class VoiceApp:
             plan_command(key, utterance, state, controls, apps, record, progress=chosen)
             record["outcome"] = "planned"
             record["event"] = "plan"
-            append_log(LOG, record)
+            self._log(record)
             self.events.put(("plan", (record, state, controls, apps, utterance)))
         except Exception as error:
             record["outcome"] = "error"
             record["event"] = "error"
             record["error"] = f"{type(error).__name__}: {error}"
-            append_log(LOG, record)
+            self._log(record)
             self.events.put(("failed", record))
 
     def _run_goal(self, key: str, utterance: str, captured: dict, record: dict, auto_run: bool,
@@ -663,7 +675,7 @@ class VoiceApp:
                                     for s in reversed(record["steps"])
                                     if s.get("error") or s.get("observe_error") or s.get("reason")),
                                    "Goal stopped before completion")
-        append_log(LOG, record)
+        self._log(record)
         self.events.put(("goal_finished", record))
 
     def stop_goal(self) -> None:
@@ -708,7 +720,7 @@ class VoiceApp:
             record["error"] = f"{type(error).__name__}: {error}"
         record["timings_ms"]["execute"] = round((time.perf_counter() - start) * 1000)
         record["event"] = "final"
-        append_log(LOG, _without_replay_payload(record))
+        self._log(_without_replay_payload(record))
         self.events.put(("executed", record))
 
     def discard_pending(self) -> None:
@@ -716,7 +728,7 @@ class VoiceApp:
             record = self.pending[0]
             record["outcome"] = "discarded"
             record["event"] = "final"
-            append_log(LOG, _without_replay_payload(record))
+            self._log(_without_replay_payload(record))
             self.pending = None
             self._update_entry(record)
 
@@ -859,6 +871,7 @@ class VoiceApp:
                 {"panel": self.toggle_panel, "auto": lambda: self.auto.set(not self.auto.get()),
                  "goal_mode": lambda: self.goal_mode.set(not self.goal_mode.get()), "stop_goal": self.stop_goal,
                  "hide_idle": lambda: self.hide_idle.set(not self.hide_idle.get()),
+                 "keep_logs": lambda: self.logs_var.set(not self.logs_var.get()),
                  "api_key": self.open_key_dialog, "logs": self.open_logs, "quit": self._close}[value]()
                 if value == "quit":
                     return
