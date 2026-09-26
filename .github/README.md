@@ -127,6 +127,16 @@ The app asks for a key on first start, offering any it finds. You can also put `
 are git-ignored). [voice_control/README.md](../voice_control/README.md) covers usage, settings, design notes and
 tests.
 
+## Star history
+
+<a href="https://www.star-history.com/#Ayushmaniar/jev-voice-computer-use&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ayushmaniar/jev-voice-computer-use&type=Date&theme=dark">
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ayushmaniar/jev-voice-computer-use&type=Date">
+    <img alt="Star history chart for Ayushmaniar/jev-voice-computer-use" src="https://api.star-history.com/svg?repos=ayushmaniar/jev-voice-computer-use&type=Date">
+  </picture>
+</a>
+
 ## License
 
 [MIT](../LICENSE).
